@@ -90,7 +90,7 @@ generate_debug_embeddings(std::vector<TextureView> * texture_views) {
         mve::ByteImage::Ptr image = mve::ByteImage::create(texture_view->get_width(), texture_view->get_height(), 3);
         image->fill_color(*color);
 
-        for(int ox=0; ox < image->width() - 13; ox += 13) {
+/*        for(int ox=0; ox < image->width() - 13; ox += 13) {
             for(int oy=0; oy < image->height() - 6; oy += 6) {
                 std::size_t id = texture_view->get_id();
                 int d0 = id / 100;
@@ -102,7 +102,7 @@ generate_debug_embeddings(std::vector<TextureView> * texture_views) {
                 print_number(image, ox + 8, oy, d2, font_color);
             }
         }
-
+*/
         texture_view->bind_image(image);
     }
 }
