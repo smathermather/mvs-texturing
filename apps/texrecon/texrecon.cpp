@@ -52,11 +52,7 @@ int main(int argc, char **argv) {
     if (!util::fs::dir_exists(tmp_dir.c_str())) {
         util::fs::mkdir(tmp_dir.c_str());
     } else {
-        std::cerr
-            << "Temporary directory \"tmp\" exists within the destination directory.\n"
-            << "Cannot continue since this directory would be delete in the end.\n"
-            << std::endl;
-        std::exit(EXIT_FAILURE);
+        std::cout << "Careful! Temporary directory \"tmp\" exists within the destination directory." << std::endl;
     }
 
     // Set the number of threads to use.
@@ -173,7 +169,11 @@ int main(int argc, char **argv) {
         } else {
             ProgressCounter texture_patch_counter("Calculating validity masks for texture patches", texture_patches.size());
             #pragma omp parallel for schedule(dynamic)
+#if !defined(_MSC_VER)
             for (std::size_t i = 0; i < texture_patches.size(); ++i) {
+#else
+            for (std::int64_t i = 0; i < texture_patches.size(); ++i) {
+#endif
                 texture_patch_counter.progress<SIMPLE>();
                 TexturePatch::Ptr texture_patch = texture_patches[i];
                 std::vector<math::Vec3f> patch_adjust_values(texture_patch->get_faces().size() * 3, math::Vec3f(0.0f));

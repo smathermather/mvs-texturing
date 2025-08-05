@@ -51,7 +51,12 @@ TextureView::load_image(void) {
     }
 
     if (image == NULL){
-        image = mve::image::load_tiff_float_file(image_file);
+        try {
+            image = mve::image::load_tiff_float_file(image_file);
+        }catch (const std::exception& e) {
+            std::cerr << "Failed to load " << image_file << ": " << e.what();
+            exit(1);
+        }
     }
 
     // Assure images have always at least 3 channels
@@ -65,6 +70,24 @@ TextureView::load_image(void) {
         }
 
         grayscale = true;
+    }
+
+    if (image_mask == NULL){
+        try{
+            std::string mask_file = util::fs::dirname(image_file) + "/../masks/" + util::fs::basename(image_file) + ".png";
+            if (util::fs::file_exists(mask_file.c_str())){
+                image_mask = mve::image::load_png_file(mask_file);
+
+                if (image_mask->width() != image->width() ||
+                    image_mask->height() != image->height()){
+                    std::cerr << "Image mask " << mask_file << " dimensions do not match, skipping..." << std::endl;
+                    image_mask.reset();
+                    image_mask = NULL;
+                }
+            }
+        }catch(...){
+            std::cerr << "Cannot load image mask " << std::endl;
+        }
     }
 }
 
@@ -101,6 +124,24 @@ TextureView::valid_pixel(math::Vec2f pixel) const {
     /* The center of a pixel is in the middle. */
     bool valid = (x >= 0.0f && x < static_cast<float>(width - 1)
         && y >= 0.0f && y < static_cast<float>(height - 1));
+
+    if (valid && image_mask != NULL){
+        /* Only pixel which can be correctly interpolated are valid. */
+        float cx = std::max(0.0f, std::min(static_cast<float>(width - 1), x));
+        float cy = std::max(0.0f, std::min(static_cast<float>(height - 1), y));
+        int const floor_x = static_cast<int>(cx);
+        int const floor_y = static_cast<int>(cy);
+        int const floor_xp1 = std::min(floor_x + 1, width - 1);
+        int const floor_yp1 = std::min(floor_y + 1, height - 1);
+
+        /* We screw up if weights would be zero
+         * e.g. we lose valid pixel in the border of images... */
+
+        valid = image_mask->at(floor_x + floor_y * width) == 255 &&
+                image_mask->at(floor_x + floor_yp1 * width) == 255 &&
+                image_mask->at(floor_xp1 + floor_y * width) == 255 &&
+                image_mask->at(floor_xp1 + floor_yp1 * width) == 255;
+    }
 
     if (valid && validity_mask.size() == static_cast<std::size_t>(width * height)) {
         /* Only pixel which can be correctly interpolated are valid. */

@@ -94,7 +94,7 @@ struct Settings {
     bool keep_unseen_faces = false;
     bool nadir_mode = false;
 
-    float nadir_weight = 65535.0f;
+    int max_texture_size = 8 * 1024;
 };
 
 TEX_NAMESPACE_END

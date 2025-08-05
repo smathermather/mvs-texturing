@@ -18,8 +18,8 @@
 #define SKIP_HOLE_FILLING "skip_hole_filling"
 #define KEEP_UNSEEN_FACES "keep_unseen_faces"
 #define NADIR_MODE    "nadir_mode"
-#define NADIR_WEIGHT    "nadir_weight"
 #define NUM_THREADS "num_threads"
+#define MAX_TEXTURE_SIZE "max_texture_size"
 
 Arguments parse_args(int argc, char **argv) {
     util::Arguments args;
@@ -87,14 +87,14 @@ Arguments parse_args(int argc, char **argv) {
         "Keep unseen faces [false]");
     args.add_option('\0', NADIR_MODE, false,
         "Turn on nadir mode [false]");
-    args.add_option('n', NADIR_WEIGHT, 65535.0f,
-        "Set nadir weight [65535]");
     args.add_option('\0', WRITE_TIMINGS, false,
         "Write out timings for each algorithm step (OUT_PREFIX + _timings.csv)");
     args.add_option('\0', NO_INTERMEDIATE_RESULTS, false,
         "Do not write out intermediate results");
     args.add_option('\0', NUM_THREADS, true,
         "How many threads to use. Set 1 for determinism.");
+    args.add_option('\0', MAX_TEXTURE_SIZE, true,
+        "Maximum size of output textures.");
     args.parse(argc, argv);
 
     Arguments conf;
@@ -137,9 +137,6 @@ Arguments parse_args(int argc, char **argv) {
         case 't':
             conf.settings.tone_mapping = parse_choice<tex::ToneMapping>(i->arg);
         break;
-        case 'n':
-            conf.settings.nadir_weight = std::max(0.0f, std::min(i->get_arg<float>(), 4294967295.0f));
-        break;
         case '\0':
             if (i->opt->lopt == SKIP_GEOMETRIC_VISIBILITY_TEST) {
                 conf.settings.geometric_visibility_test = false;
@@ -159,6 +156,8 @@ Arguments parse_args(int argc, char **argv) {
                 conf.write_intermediate_results = false;
             } else if (i->opt->lopt == NUM_THREADS) {
                 conf.num_threads = std::stoi(i->arg);
+            } else if (i->opt->lopt == MAX_TEXTURE_SIZE) {
+                conf.settings.max_texture_size = std::stoi(i->arg);
             } else {
                 throw std::invalid_argument("Invalid long option");
             }
@@ -166,6 +165,11 @@ Arguments parse_args(int argc, char **argv) {
         default:
             throw std::invalid_argument("Invalid short option");
         }
+    }
+
+    if (conf.settings.nadir_mode){
+        // Always set to area
+        conf.settings.data_term = tex::DataTerm::DATA_TERM_AREA;
     }
 
     return conf;

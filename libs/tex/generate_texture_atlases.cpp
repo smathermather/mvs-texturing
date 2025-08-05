@@ -21,7 +21,6 @@
 #include "texture_patch.h"
 #include "texture_atlas.h"
 
-#define MAX_TEXTURE_SIZE (8 * 1024)
 #define PREF_TEXTURE_SIZE (4 * 1024)
 #define MIN_TEXTURE_SIZE (256)
 
@@ -33,8 +32,8 @@ TEX_NAMESPACE_BEGIN
   * of the maximal possible texture atlas size.
   */
 unsigned int
-calculate_texture_size(std::list<TexturePatch::ConstPtr> const & texture_patches) {
-    unsigned int size = MAX_TEXTURE_SIZE;
+calculate_texture_size(std::list<TexturePatch::ConstPtr> const & texture_patches, Settings const & settings) {
+    unsigned int size = settings.max_texture_size;
 
     while (true) {
         unsigned int total_area = 0;
@@ -62,8 +61,8 @@ calculate_texture_size(std::list<TexturePatch::ConstPtr> const & texture_patches
             total_area += area;
         }
 
-        assert(max_width < MAX_TEXTURE_SIZE);
-        assert(max_height < MAX_TEXTURE_SIZE);
+        assert(max_width < settings.max_texture_size);
+        assert(max_height < settings.max_texture_size);
         if (size > PREF_TEXTURE_SIZE &&
             max_width < PREF_TEXTURE_SIZE &&
             max_height < PREF_TEXTURE_SIZE &&
@@ -115,15 +114,18 @@ generate_texture_atlases(std::vector<TexturePatch::Ptr> * orig_texture_patches,
 
     std::size_t const total_num_patches = texture_patches.size();
     std::size_t remaining_patches = texture_patches.size();
+#if !defined(_WIN32)
     std::ofstream tty("/dev/tty", std::ios_base::out);
-
-    #pragma omp parallel
-    {
-    #pragma omp single
-    {
+#else
+    std::ostream &tty = std::cout;
+#endif
+    // #pragma omp parallel
+    // {
+    // #pragma omp single
+    // {
 
     while (!texture_patches.empty()) {
-        unsigned int texture_size = calculate_texture_size(texture_patches);
+        unsigned int texture_size = calculate_texture_size(texture_patches, settings);
 
         texture_atlases->push_back(TextureAtlas::create(texture_size, type, grayscale));
         TextureAtlas::Ptr texture_atlas = texture_atlases->back();
@@ -148,8 +150,9 @@ generate_texture_atlases(std::vector<TexturePatch::Ptr> * orig_texture_patches,
                 ++it;
             }
         }
-
-        #pragma omp task
+// #if !defined(_MSC_VER)
+//         #pragma omp task
+// #endif
         texture_atlas->finalize();
     }
 
@@ -157,13 +160,15 @@ generate_texture_atlases(std::vector<TexturePatch::Ptr> * orig_texture_patches,
         << " 100%... done." << std::endl;
     util::WallTimer timer;
     std::cout << "\tFinalizing texture atlases... " << std::flush;
-    #pragma omp taskwait
+// #if !defined(_MSC_VER)
+//     #pragma omp taskwait
+// #endif
     std::cout << "done. (Took: " << timer.get_elapsed_sec() << "s)" << std::endl;
 
-    /* End of single region */
-    }
-    /* End of parallel region. */
-    }
+    // /* End of single region */
+    // }
+    // /* End of parallel region. */
+    // }
 }
 
 TEX_NAMESPACE_END

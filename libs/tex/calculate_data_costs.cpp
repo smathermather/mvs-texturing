@@ -98,7 +98,7 @@ photometric_outlier_detection(std::vector<FaceProjectionInfo> * infos, Settings 
         /* Compute new number of inliers (all views with a gauss value above a threshold). */
         for (std::size_t row = 0; row < infos->size(); ++row) {
             Eigen::RowVector3d color = mve_to_eigen(infos->at(row).mean_color).cast<double>();
-            double gauss_value = multi_gauss_unnormalized(color, var_mean, covariance_inv);
+            double gauss_value = multi_gauss_unnormalized<double, 3>(color, var_mean, covariance_inv);
             is_inlier[row] = (gauss_value >= gauss_rejection_threshold ? 1 : 0);
         }
         /* Resize Eigen matrix accordingly and fill with new inliers. */
@@ -113,7 +113,7 @@ photometric_outlier_detection(std::vector<FaceProjectionInfo> * infos, Settings 
     covariance_inv *= outlier_removal_factor;
     for (FaceProjectionInfo & info : *infos) {
         Eigen::RowVector3d color = mve_to_eigen(info.mean_color).cast<double>();
-        double gauss_value = multi_gauss_unnormalized(color, var_mean, covariance_inv);
+        double gauss_value = multi_gauss_unnormalized<double, 3>(color, var_mean, covariance_inv);
         assert(0.0 <= gauss_value && gauss_value <= 1.0);
         switch(settings.outlier_removal) {
             case OUTLIER_REMOVAL_NONE: return true;
@@ -150,7 +150,11 @@ calculate_face_projection_infos(mve::TriangleMesh::ConstPtr mesh,
         std::vector<std::pair<std::size_t, FaceProjectionInfo> > projected_face_view_infos;
 
         #pragma omp for schedule(dynamic)
+#if !defined(_MSC_VER)
         for (std::uint16_t j = 0; j < static_cast<std::uint16_t>(num_views); ++j) {
+#else
+        for (std::int32_t j = 0; j < num_views; ++j) {
+#endif
             view_counter.progress<SIMPLE>();
 
             TextureView * texture_view = &texture_views->at(j);
@@ -205,7 +209,7 @@ calculate_face_projection_infos(mve::TriangleMesh::ConstPtr mesh,
                     if (viewing_angle < 0.0f || viewing_direction.dot(view_to_face_vec) < 0.0f)
                         continue;
 
-                    if (std::acos(viewing_angle) > MATH_DEG2RAD(75.0f))
+                    if (std::acos(viewing_angle) > MATH_DEG2RAD(settings.nadir_mode ? 90.0f : 75.0f))
                         continue;
                 }
 
@@ -213,9 +217,10 @@ calculate_face_projection_infos(mve::TriangleMesh::ConstPtr mesh,
                 if (!texture_view->inside(v1, v2, v3))
                     continue;
 
+                bool visible = true;
                 if (!vertical && settings.geometric_visibility_test) {
                     /* Viewing rays do not collide? */
-                    bool visible = true;
+                   
                     math::Vec3f const * samples[] = {&v1, &v2, &v3};
                     // TODO: random monte carlo samples...
 
@@ -233,7 +238,7 @@ calculate_face_projection_infos(mve::TriangleMesh::ConstPtr mesh,
                             break;
                         }
                     }
-                    if (!visible) continue;
+                    if (!visible && !settings.nadir_mode) continue;
                 }
 
                 FaceProjectionInfo info = {j, 0.0f, math::Vec3f(0.0f, 0.0f, 0.0f)};
@@ -249,10 +254,14 @@ calculate_face_projection_infos(mve::TriangleMesh::ConstPtr mesh,
 
                 if (info.quality == 0.0) continue;
 
-                if (vertical){
-                    /* Choose a view that is closest to the face
-                       instead of the GMI/AREA quality score. */ 
-                    info.quality = 0.0001f + settings.nadir_weight / (face_center - view_pos).square_norm();
+                if (settings.nadir_mode){
+                    float m1 = up.dot(face_to_view_vec);
+                    float m2 = up.dot(viewing_direction);
+                    float score = (m1*m1)*(m1*m1)*(m2*m2);
+                    if (!visible) info.quality = 1.0f * score;
+                    else{
+                        info.quality = std::max(1.0f, 10000.0f * score);
+                    }
                 }
 
                 /* Change color space. */
@@ -292,7 +301,11 @@ postprocess_face_infos(Settings const & settings,
     ProgressCounter face_counter("\tPostprocessing face infos",
         face_projection_infos->size());
     #pragma omp parallel for schedule(dynamic)
+#if !defined(_MSC_VER)
     for (std::size_t i = 0; i < face_projection_infos->size(); ++i) {
+#else
+    for (std::int64_t i = 0; i < face_projection_infos->size(); ++i) {
+#endif
         face_counter.progress<SIMPLE>();
 
         std::vector<FaceProjectionInfo> & infos = face_projection_infos->at(i);
@@ -318,7 +331,6 @@ postprocess_face_infos(Settings const & settings,
     for (std::size_t i = 0; i < face_projection_infos->size(); ++i)
         for (FaceProjectionInfo const & info : face_projection_infos->at(i))
             hist_qualities.add_value(info.quality);
-
     float percentile = hist_qualities.get_approx_percentile(0.995f);
 
     /* Calculate the costs. */
