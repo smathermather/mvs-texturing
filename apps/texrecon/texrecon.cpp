@@ -11,6 +11,7 @@
 #include <fstream>
 #include <vector>
 #include <tbb/task_arena.h>
+#include <tbb/task_scheduler_init.h>
 #include <omp.h>
 
 #include <util/timer.h>
